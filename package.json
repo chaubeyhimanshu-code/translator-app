@@ -1,17 +1,16 @@
 {
-  "name": "indian-legal-translator",
+  "name": "translator-app",
   "version": "1.0.0",
+  "description": "Indian-language legal document translator (Supreme Court formatting)",
   "private": true,
-  "scripts": {
-    "dev": "vercel dev",
-    "deploy": "vercel --prod"
+  "type": "module",
+  "engines": {
+    "node": ">=18.x"
   },
   "dependencies": {
-    "anthropic": "^0.25.0",
-    "multer": "^1.4.5-lts.1",
-    "pdfjs-dist": "2.16.105",
-    "canvas": "^2.11.2",
-    "docx": "^8.5.0",
-    "jszip": "^3.10.1"
+    "@anthropic-ai/sdk": "^0.69.0",
+    "formidable": "^3.5.4",
+    "pdf-lib": "^1.17.1",
+    "mammoth": "^1.11.0"
   }
 }
