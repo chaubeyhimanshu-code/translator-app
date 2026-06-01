@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Indian Legal Translator — SC Format</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --navy: #1F2D5C; --mint: #80D0B0; --bg: #F4F6FA;
+  --surface: #fff; --border: #D8DCE8; --muted: #6B7280;
+  --error: #DC2626; --success: #059669; --r: 8px;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: #1A1A2E; min-height: 100vh; }
+header { background: var(--navy); color: #fff; padding: 16px 28px; display: flex; align-items: center; gap: 14px; }
+header h1 { font-size: 17px; font-weight: 600; }
+header p  { font-size: 12px; opacity: .7; margin-top: 2px; }
+.badge { background: var(--mint); color: var(--navy); font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; letter-spacing: .5px; text-transform: uppercase; }
+main { max-width: 900px; margin: 28px auto; padding: 0 18px 48px; display: flex; flex-direction: column; gap: 18px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); box-shadow: 0 1px 4px rgba(0,0,0,.07); padding: 22px; }
+.card-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--navy); margin-bottom: 14px; }
+/* API key row */
+.api-row { display: flex; gap: 10px; align-items: center; }
+.api-row input { flex: 1; padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; font-family: monospace; }
+.api-row input:focus { outline: none; border-color: var(--navy); }
+.api-save { padding: 9px 16px; background: var(--navy); color: #fff; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+.api-saved { font-size: 12px; color: var(--success); margin-top: 6px; display: none; }
+/* Drop zone */
+#drop-zone { border: 2px dashed var(--border); border-radius: var(--r); padding: 34px 24px; text-align: center; cursor: pointer; transition: all .2s; position: relative; }
+#drop-zone.hover { border-color: var(--mint); background: #F0FAF6; }
+#drop-zone.filled { border-color: var(--navy); background: #EEF1FA; }
+#drop-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+#drop-zone .icon { font-size: 34px; }
+#drop-zone p { margin-top: 8px; font-size: 14px; color: var(--muted); }
+#drop-zone .hint { font-size: 12px; color: #9CA3AF; margin-top: 4px; }
+.pill { display: inline-flex; align-items: center; gap: 8px; background: var(--navy); color: #fff; padding: 5px 12px; border-radius: 20px; font-size: 13px; margin-top: 10px; }
+.pill button { background: none; border: none; color: #fff; cursor: pointer; font-size: 16px; line-height: 1; }
+/* Controls row */
+.controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-top: 14px; }
+.ctrl-group { display: flex; flex-direction: column; gap: 4px; }
+.ctrl-group label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.ctrl-group select, .ctrl-group input[type=number] { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; background: #fff; }
+.ctrl-group select:focus, .ctrl-group input:focus { outline: none; border-color: var(--navy); }
+.page-range { display: flex; gap: 6px; align-items: center; }
+.page-range span { font-size: 13px; color: var(--muted); }
+.page-range input { width: 64px; }
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 20px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: opacity .15s; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn-primary { background: var(--navy); color: #fff; }
+.btn-mint    { background: var(--mint); color: var(--navy); }
+.btn-ghost   { background: transparent; color: var(--navy); border: 1.5px solid var(--navy); }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+/* Status */
+.status { display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 10px; }
+.status.info    { background: #EFF6FF; color: #1D4ED8; border: 1px solid #BFDBFE; }
+.status.success { background: #ECFDF5; color: var(--success); border: 1px solid #A7F3D0; }
+.status.error   { background: #FEF2F2; color: var(--error); border: 1px solid #FCA5A5; }
+.spinner { width: 14px; height: 14px; border: 2px solid currentColor; border-top-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; margin-top: 1px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* Text boxes */
+.source-box { background: #FAFAFA; border: 1px solid var(--border); border-radius: 6px; padding: 14px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; max-height: 220px; overflow-y: auto; color: #333; }
+.trans-box  { background: #FAFAFA; border: 1px solid var(--border); border-radius: 6px; padding: 14px; font-family: "Times New Roman", Times, serif; font-size: 14px; line-height: 1.5; white-space: pre-wrap; max-height: 360px; overflow-y: auto; min-height: 80px; }
+.format-bar { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); background: #F9FAFB; border: 1px solid var(--border); border-radius: 6px; padding: 7px 12px; margin-bottom: 10px; }
+.notice { font-size: 12px; color: var(--muted); border-left: 3px solid var(--mint); padding-left: 10px; line-height: 1.55; margin-top: 12px; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Indian Legal Translator</h1>
+    <p>All Indian Languages → English &nbsp;·&nbsp; Supreme Court Format</p>
+  </div>
+  <div class="badge">SC Format</div>
+</header>
+
+<main>
+
+  <!-- API Key -->
+  <div class="card">
+    <div class="card-title">Anthropic API Key</div>
+    <div class="api-row">
+      <input type="password" id="api-key" placeholder="sk-ant-..." autocomplete="off">
+      <button class="api-save" onclick="saveKey()">Save</button>
+    </div>
+    <div class="api-saved" id="api-saved">✓ Key saved for this session</div>
+    <div class="notice" style="margin-top:10px;">
+      Your key is used only to call the Anthropic API and is never stored on any server. Get yours at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>.
+    </div>
+  </div>
+
+  <!-- Upload + Controls -->
+  <div class="card">
+    <div class="card-title">Step 1 — Upload Document</div>
+    <div id="drop-zone" ondragover="dz(event,true)" ondragleave="dz(event,false)" ondrop="onDrop(event)">
+      <input type="file" accept=".txt,.docx,.pdf" onchange="onFile(this.files[0])">
+      <div class="icon">📄</div>
+      <p>Drop your file here or click to browse</p>
+      <div class="hint">Supported: .txt · .docx · .pdf (digital or scanned)</div>
+    </div>
+    <div id="file-pill" class="hidden"></div>
+
+    <div class="controls" id="controls">
+      <div class="ctrl-group">
+        <label>Source Language</label>
+        <select id="lang-select">
+          <option value="auto">Auto-detect</option>
+          <option value="hi">Hindi</option>
+          <option value="ta">Tamil</option>
+          <option value="te">Telugu</option>
+          <option value="kn">Kannada</option>
+          <option value="ml">Malayalam</option>
+          <option value="mr">Marathi</option>
+          <option value="gu">Gujarati</option>
+          <option value="bn">Bengali</option>
+          <option value="or">Odia</option>
+          <option value="pa">Punjabi</option>
+          <option value="as">Assamese</option>
+          <option value="ur">Urdu</option>
+          <option value="sa">Sanskrit</option>
+          <option value="kok">Konkani</option>
+          <option value="sd">Sindhi</option>
+          <option value="ks">Kashmiri</option>
+          <option value="mni">Manipuri</option>
+          <option value="ne">Nepali</option>
+          <option value="mai">Maithili</option>
+          <option value="doi">Dogri</option>
+          <option value="brx">Bodo</option>
+          <option value="sat">Santali</option>
+        </select>
+      </div>
+
+      <div class="ctrl-group" id="page-range-group" style="display:none">
+        <label>Page Range</label>
+        <div class="page-range">
+          <input type="number" id="from-page" value="1" min="1" placeholder="From">
+          <span>to</span>
+          <input type="number" id="to-page" value="10" min="1" placeholder="To">
+          <span id="page-total" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+      </div>
+    </div>
+
+    <div id="upload-status"></div>
+    <div class="notice">
+      Scanned PDFs are processed page-by-page on the server — no browser OCR needed.<br>
+      Only what is present in the document is translated. Nothing is added or inferred.
+    </div>
+  </div>
+
+  <!-- Translate -->
+  <div class="card" id="card-translate" style="display:none">
+    <div class="card-title">Step 2 — Translate</div>
+    <div id="tx-status"></div>
+    <div class="actions">
+      <button class="btn btn-primary" id="btn-translate" onclick="translate()">Translate to English</button>
+      <button class="btn btn-ghost" onclick="clearAll()">Start Over</button>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="card hidden" id="card-result">
+    <div class="card-title">Step 3 — English Translation</div>
+    <div class="format-bar">
+      <span>Font: <strong>Times New Roman</strong></span><span>·</span>
+      <span>Size: <strong>12 pt</strong></span><span>·</span>
+      <span>Line spacing: <strong>1.5</strong></span><span>·</span>
+      <span>Alignment: <strong>Justified</strong></span>
+    </div>
+    <div id="result-status"></div>
+    <div class="trans-box" id="trans-box">Translation will appear here…</div>
+    <div class="actions">
+      <button class="btn btn-mint" id="btn-download" onclick="downloadDocx()">⬇ Download .docx</button>
+      <button class="btn btn-ghost" onclick="retranslate()">↺ Translate Again</button>
+    </div>
+  </div>
+
+</main>
+
+<!-- docx library -->
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.js"></script>
+
+<script>
+let state = { file: null, fileType: "", fileName: "", totalPages: 0, translation: "" };
+
+// ── API Key ──────────────────────────────────────────────────────────────────
+function saveKey() {
+  const key = document.getElementById("api-key").value.trim();
+  if (!key.startsWith("sk-ant-")) return alert("That doesn't look like a valid Anthropic API key.");
+  sessionStorage.setItem("apiKey", key);
+  document.getElementById("api-saved").style.display = "block";
+}
+function getKey() { return sessionStorage.getItem("apiKey") || document.getElementById("api-key").value.trim(); }
+
+// ── Drop zone ────────────────────────────────────────────────────────────────
+function dz(e, over) { e.preventDefault(); document.getElementById("drop-zone").classList.toggle("hover", over); }
+function onDrop(e) { e.preventDefault(); dz(e, false); if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]); }
+
+async function onFile(file) {
+  const ext = file.name.split(".").pop().toLowerCase();
+  if (!["txt","docx","pdf"].includes(ext)) return showStatus("upload-status","error","Unsupported file type. Use .txt, .docx, or .pdf.");
+
+  state.file = file;
+  state.fileType = ext;
+  state.fileName = file.name.replace(/\.[^.]+$/, "");
+  state.translation = "";
+
+  document.getElementById("drop-zone").classList.add("filled");
+  document.getElementById("file-pill").className = "";
+  document.getElementById("file-pill").innerHTML = `<div class="pill">📄 ${file.name} <button onclick="clearAll()">×</button></div>`;
+
+  if (ext === "pdf") {
+    showStatus("upload-status","info","Reading PDF…", true);
+    try {
+      const b64 = await toBase64(file);
+      const res = await fetch("/api/pagecount", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileData: b64, fileType: "pdf" }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      state.totalPages = data.pages;
+      document.getElementById("to-page").value = Math.min(10, data.pages);
+      document.getElementById("to-page").max = data.pages;
+      document.getElementById("from-page").max = data.pages;
+      document.getElementById("page-total").textContent = `of ${data.pages} pages`;
+      document.getElementById("page-range-group").style.display = "flex";
+      clearStatus("upload-status");
+    } catch(err) {
+      showStatus("upload-status","error", err.message);
+      return;
+    }
+  } else {
+    document.getElementById("page-range-group").style.display = "none";
+    clearStatus("upload-status");
+  }
+
+  document.getElementById("card-translate").style.display = "block";
+  document.getElementById("card-result").classList.add("hidden");
+}
+
+// ── Translate ────────────────────────────────────────────────────────────────
+async function translate() {
+  const key = getKey();
+  if (!key) return alert("Please enter your Anthropic API key first.");
+  if (!state.file) return alert("Please upload a file first.");
+
+  const fromPage = parseInt(document.getElementById("from-page").value) || 1;
+  const toPage   = parseInt(document.getElementById("to-page").value)   || 10;
+  const langCode = document.getElementById("lang-select").value;
+
+  if (state.fileType === "pdf" && toPage < fromPage) return alert("'To' page must be ≥ 'From' page.");
+
+  document.getElementById("btn-translate").disabled = true;
+  document.getElementById("card-result").classList.remove("hidden");
+  document.getElementById("trans-box").textContent = "";
+  showStatus("tx-status","info",`Uploading and translating pages ${fromPage}–${toPage}…`, true);
+  showStatus("result-status","info","Waiting for translation…", true);
+
+  try {
+    const b64 = await toBase64(state.file);
+    const res = await fetch("/api/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fileData: b64,
+        fileType: state.fileType,
+        fileName: state.fileName,
+        langCode,
+        fromPage,
+        toPage,
+        apiKey: key,
+      }),
+    });
+
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    if (!data.translation || !data.translation.trim()) throw new Error("Empty translation returned.");
+
+    state.translation = data.translation;
+    document.getElementById("trans-box").textContent = data.translation;
+    clearStatus("tx-status");
+    showStatus("result-status","success","Translation complete. Review above and download your .docx.");
+
+  } catch(err) {
+    showStatus("tx-status","error","Translation failed: " + err.message);
+    showStatus("result-status","error", err.message);
+  }
+
+  document.getElementById("btn-translate").disabled = false;
+}
+
+function retranslate() {
+  document.getElementById("card-result").classList.add("hidden");
+  translate();
+}
+
+// ── Download .docx ───────────────────────────────────────────────────────────
+async function downloadDocx() {
+  if (!state.translation.trim()) return;
+  const { Document, Packer, Paragraph, TextRun, AlignmentType } = docx;
+
+  const children = state.translation
+    .split(/\n{2,}/)
+    .filter(p => p.trim())
+    .map(para => {
+      const lines = para.split("\n");
+      const runs  = lines.map((line, idx) =>
+        new TextRun({ text: line, font: "Times New Roman", size: 24, break: idx > 0 ? 1 : 0 })
+      );
+      return new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
+        spacing: { line: 360, lineRule: "auto", before: 0, after: 200 },
+        children: runs,
+      });
+    });
+
+  const doc = new Document({
+    styles: { default: { document: { run: { font: "Times New Roman", size: 24 } } } },
+    sections: [{
+      properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
+      children,
+    }],
+  });
+
+  const buffer = await Packer.toBuffer(doc);
+  const blob   = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+  const url    = URL.createObjectURL(blob);
+  const a      = document.createElement("a");
+  a.href = url; a.download = `${state.fileName || "translation"}_EN.docx`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function toBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload  = () => res(r.result.split(",")[1]);
+    r.onerror = () => rej(new Error("Could not read file"));
+    r.readAsDataURL(file);
+  });
+}
+
+function showStatus(elId, type, msg, spinner = false) {
+  document.getElementById(elId).innerHTML = `
+    <div class="status ${type}">
+      ${spinner ? '<div class="spinner"></div>' : `<span>${type==="success"?"✓":type==="error"?"✗":"ℹ"}</span>`}
+      <span>${msg}</span>
+    </div>`;
+}
+
+function clearStatus(elId) { document.getElementById(elId).innerHTML = ""; }
+
+function clearAll() {
+  state = { file: null, fileType: "", fileName: "", totalPages: 0, translation: "" };
+  document.getElementById("drop-zone").classList.remove("filled","hover");
+  document.getElementById("file-pill").className = "hidden";
+  document.getElementById("file-pill").innerHTML = "";
+  document.getElementById("page-range-group").style.display = "none";
+  document.getElementById("card-translate").style.display = "none";
+  document.getElementById("card-result").classList.add("hidden");
+  document.getElementById("trans-box").textContent = "Translation will appear here…";
+  clearStatus("upload-status"); clearStatus("tx-status"); clearStatus("result-status");
+  document.getElementById("btn-translate").disabled = false;
+  // Reset file input
+  const dz = document.getElementById("drop-zone");
+  const inp = dz.querySelector("input");
+  inp.value = "";
+}
+</script>
+</body>
+</html>
