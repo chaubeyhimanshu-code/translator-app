@@ -1,166 +1,164 @@
-const pdfjs = require("pdfjs-dist/legacy/build/pdf.js");
-const { createCanvas } = require("canvas");
-const Anthropic = require("@anthropic-ai/sdk");
-const JSZip = require("jszip");
-
-export const config = { api: { bodyParser: { sizeLimit: "50mb" } } };
-
-const LANGUAGES = {
-  auto:       "Auto-detect",
-  hi:         "Hindi",
-  ta:         "Tamil",
-  te:         "Telugu",
-  kn:         "Kannada",
-  ml:         "Malayalam",
-  mr:         "Marathi",
-  gu:         "Gujarati",
-  bn:         "Bengali",
-  or:         "Odia",
-  pa:         "Punjabi",
-  as:         "Assamese",
-  ur:         "Urdu",
-  sa:         "Sanskrit",
-  kok:        "Konkani",
-  sd:         "Sindhi",
-  ks:         "Kashmiri",
-  mni:        "Manipuri",
-  ne:         "Nepali",
-  mai:        "Maithili",
-  doi:        "Dogri",
-  brx:        "Bodo",
-  sat:        "Santali",
+import formidable from 'formidable';
+import fs from 'fs';
+import Anthropic from '@anthropic-ai/sdk';
+import { PDFDocument } from 'pdf-lib';
+import mammoth from 'mammoth';
+ 
+export const config = {
+  api: { bodyParser: false },
+  // Long translations need time. 300s requires a Pro plan / Fluid compute.
+  // On Hobby this is capped much lower and long docs WILL time out.
+  maxDuration: 300,
 };
-
-async function extractTextFromDocx(buffer) {
-  const zip = await JSZip.loadAsync(buffer);
-  const xml = await zip.file("word/document.xml").async("string");
-  return xml
-    .replace(/<w:br[^/]*/g, "\n")
-    .replace(/<\/w:p>/g, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+ 
+// Override with the CLAUDE_MODEL env var. claude-opus-4-8 is current and supports
+// PDF/vision. claude-sonnet-4-6 is much cheaper for bulk translation.
+const MODEL = process.env.CLAUDE_MODEL || 'claude-opus-4-8';
+ 
+// Output token cap. A long document can exceed this and get truncated — for real
+// 100-page jobs, translate in chunks instead of one call (see notes in chat).
+const MAX_TOKENS = 32000;
+ 
+const SYSTEM_PROMPT = `You are a professional legal translator. You translate Indian-language court and legal documents into English for filing before the Supreme Court of India.
+ 
+Rules:
+- Translate faithfully and completely. Do not summarise, omit, paraphrase loosely, or add commentary.
+- Preserve all legal terminology, party names, case numbers, dates, statutory references, and citations exactly.
+- Use standard English transliteration for proper nouns; retain the original term in square brackets only where ambiguity would otherwise change meaning.
+- Preserve the paragraph structure and any numbering of the source document.
+- Write in clear, formal English suitable for a court record.
+- Output ONLY the translated English text. No preamble, no notes, no markdown formatting.`;
+ 
+function firstFile(files) {
+  const f = files.file;
+  if (!f) return null;
+  return Array.isArray(f) ? f[0] : f;
 }
-
-async function getPdfPageCount(buffer) {
-  const pdf = await pdfjs.getDocument({ data: buffer, disableWorker: true }).promise;
-  return pdf.numPages;
+function firstField(fields, key) {
+  const v = fields[key];
+  if (v == null) return undefined;
+  return Array.isArray(v) ? v[0] : v;
 }
-
-async function extractPdfTextLayer(buffer) {
-  const pdf = await pdfjs.getDocument({ data: buffer, disableWorker: true }).promise;
-  let text = "";
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    text += content.items.map(s => s.str).join(" ") + "\n\n";
+function textFrom(message) {
+  return (message.content || [])
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text)
+    .join('\n');
+}
+ 
+async function translatePdf(client, buf, startPage, endPage) {
+  const src = await PDFDocument.load(buf, { ignoreEncryption: true });
+  const total = src.getPageCount();
+  const s = Math.max(1, startPage || 1);
+  const e = Math.min(total, endPage || total);
+  if (s > e) throw new Error(`Invalid page range: start ${s} is after end ${e}.`);
+  if (e - s + 1 > 100) {
+    throw new Error(
+      `Selected ${e - s + 1} pages. A single request supports at most 100 PDF pages. Narrow the range.`
+    );
   }
-  return text.trim();
-}
-
-async function rasterisePdfPages(buffer, fromPage, toPage) {
-  const pdf = await pdfjs.getDocument({ data: buffer, disableWorker: true }).promise;
-  const images = [];
-
-  for (let i = fromPage; i <= toPage; i++) {
-    const page = await pdf.getPage(i);
-    const viewport = page.getViewport({ scale: 1.5 });
-    const canvas = createCanvas(viewport.width, viewport.height);
-    const ctx = canvas.getContext("2d");
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    const base64 = canvas.toBuffer("image/jpeg", { quality: 0.85 }).toString("base64");
-    images.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } });
-  }
-  return images;
-}
-
-async function translateWithClaude(apiKey, blocks, langCode, langName) {
-  const client = new Anthropic({ apiKey });
-
-  const langInstruction = langCode === "auto"
-    ? "The source language may be any Indian language — detect it automatically."
-    : `The source language is ${langName}.`;
-
-  const system = `You are a professional legal translator specialising in Indian language to English translation for Indian courts.
-
-${langInstruction}
-
-STRICT RULES — follow every one without exception:
-1. Translate the ENTIRE provided content into English. Do not skip, summarise, or paraphrase any portion.
-2. Translate WORD-FOR-WORD to the maximum extent grammatically possible. Preserve original sentence structure, paragraph breaks, and numbering.
-3. Do NOT add, infer, or fabricate any content not present in the source.
-4. Do NOT fill blanks, guess at illegible portions, or complete incomplete sentences.
-5. If a word or phrase is unclear or illegible, translate it literally and append [unclear] — do not substitute.
-6. Preserve all numbers, dates, case numbers, party names, section references, and proper nouns exactly.
-7. Preserve all paragraph breaks and list numbering from the original.
-8. If images are provided, read every line of text visible and translate it — do not describe the images.
-9. Return ONLY the translated text — no preamble, no explanation, no footnotes.`;
-
-  const userContent = [
-    ...blocks,
-    { type: "text", text: "Translate all text above to English following the strict rules." },
-  ];
-
+ 
+  // Slice out only the requested pages so we send the model exactly that range.
+  const out = await PDFDocument.create();
+  const indices = [];
+  for (let i = s - 1; i <= e - 1; i++) indices.push(i);
+  const copied = await out.copyPages(src, indices);
+  copied.forEach((p) => out.addPage(p));
+  const bytes = await out.save();
+  const b64 = Buffer.from(bytes).toString('base64');
+ 
   const message = await client.messages.create({
-    model: "claude-opus-4-5",
-    max_tokens: 16000,
-    system,
-    messages: [{ role: "user", content: userContent }],
+    model: MODEL,
+    max_tokens: MAX_TOKENS,
+    system: SYSTEM_PROMPT,
+    messages: [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'document',
+            source: { type: 'base64', media_type: 'application/pdf', data: b64 },
+          },
+          {
+            type: 'text',
+            text: `Translate this document (pages ${s} to ${e}) into English following the rules. It may be a scanned image PDF; read it with vision if there is no text layer.`,
+          },
+        ],
+      },
+    ],
   });
-
-  return message.content.filter(b => b.type === "text").map(b => b.text).join("");
+  return textFrom(message);
 }
-
+ 
+async function translateText(client, text) {
+  if (!text || !text.trim()) throw new Error('Document contained no extractable text.');
+  const message = await client.messages.create({
+    model: MODEL,
+    max_tokens: MAX_TOKENS,
+    system: SYSTEM_PROMPT,
+    messages: [
+      {
+        role: 'user',
+        content: `Translate the following document into English following the rules.\n\n---\n${text}`,
+      },
+    ],
+  });
+  return textFrom(message);
+}
+ 
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-
-  const { fileData, fileType, fileName, langCode, fromPage, toPage, apiKey } = req.body;
-
-  if (!fileData)  return res.status(400).json({ error: "No file data" });
-  if (!apiKey)    return res.status(400).json({ error: "No API key provided" });
-
-  const langName = LANGUAGES[langCode] || "Auto-detect";
-
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    res.status(500).json({ error: 'ANTHROPIC_API_KEY is not set in the environment.' });
+    return;
+  }
+ 
+  let tmpPath = null;
   try {
-    const buffer = Buffer.from(fileData, "base64");
-    let blocks = [];
-
-    if (fileType === "txt") {
-      const text = buffer.toString("utf8");
-      blocks = [{ type: "text", text }];
-
-    } else if (fileType === "docx") {
-      const text = await extractTextFromDocx(buffer);
-      blocks = [{ type: "text", text }];
-
-    } else if (fileType === "pdf") {
-      // Try text layer first
-      const textLayer = await extractPdfTextLayer(buffer);
-      const meaningful = textLayer.replace(/\s/g, "").length;
-
-      if (meaningful >= 80) {
-        // Digital PDF — use text layer, slice to requested page range if needed
-        blocks = [{ type: "text", text: textLayer }];
-      } else {
-        // Scanned PDF — rasterise requested page range
-        const start = parseInt(fromPage) || 1;
-        const end   = parseInt(toPage)   || await getPdfPageCount(buffer);
-        blocks = await rasterisePdfPages(buffer, start, end);
-      }
+    const form = formidable({
+      maxFileSize: 25 * 1024 * 1024,
+      keepExtensions: true,
+    });
+    const [fields, files] = await form.parse(req);
+ 
+    const file = firstFile(files);
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded (expected field name "file").' });
+      return;
+    }
+    tmpPath = file.filepath;
+ 
+    const startPage = parseInt(firstField(fields, 'startPage') || '1', 10) || 1;
+    const endRaw = parseInt(firstField(fields, 'endPage') || '0', 10);
+    const endPage = endRaw > 0 ? endRaw : undefined;
+ 
+    const name = (file.originalFilename || '').toLowerCase();
+    const buf = fs.readFileSync(file.filepath);
+    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+ 
+    let translation;
+    if (name.endsWith('.pdf')) {
+      translation = await translatePdf(client, buf, startPage, endPage);
+    } else if (name.endsWith('.docx')) {
+      const { value } = await mammoth.extractRawText({ buffer: buf });
+      translation = await translateText(client, value);
+    } else if (name.endsWith('.txt')) {
+      translation = await translateText(client, buf.toString('utf8'));
     } else {
-      return res.status(400).json({ error: `Unsupported file type: ${fileType}` });
+      res.status(400).json({ error: 'Unsupported file type. Use PDF, DOCX, or TXT.' });
+      return;
     }
-
-    const translation = await translateWithClaude(apiKey, blocks, langCode, langName);
-
-    if (!translation.trim()) {
-      return res.status(500).json({ error: "Translation returned empty. Please try again." });
-    }
-
-    return res.json({ translation, detectedLang: langName });
-
+ 
+    res.status(200).json({ translation });
   } catch (err) {
-    console.error("Translate error:", err);
-    return res.status(500).json({ error: err.message || "Translation failed" });
+    res.status(500).json({ error: err?.message || 'Translation failed' });
+  } finally {
+    if (tmpPath) {
+      try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+    }
   }
 }
+ 
