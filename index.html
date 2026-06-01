@@ -95,7 +95,7 @@ main { max-width: 900px; margin: 28px auto; padding: 0 18px 48px; display: flex;
   <div class="card">
     <div class="card-title">Step 1 — Upload Document</div>
     <div id="drop-zone" ondragover="dz(event,true)" ondragleave="dz(event,false)" ondrop="onDrop(event)">
-      <input type="file" accept=".txt,.docx,.pdf" onchange="onFile(this.files[0])">
+      <input type="file" accept="*/*" onchange="onFile(this.files[0])">
       <div class="icon">📄</div>
       <p>Drop your file here or click to browse</p>
       <div class="hint">Supported: .txt · .docx · .pdf (digital or scanned)</div>
